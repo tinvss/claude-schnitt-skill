@@ -31,6 +31,7 @@ Im Arbeitsordner liegen Videodateien (Rohmaterial) und optional ein Skript (`.tx
 
 - Liste die Videodateien auf. Bei mehreren Dateien: Reihenfolge nach Dateiname, wenn nichts anderes gesagt wird.
 - Lies das Skript, falls vorhanden. Es bestimmt die Reihenfolge im fertigen Video.
+- Prüf kurz, wo der gute Ton liegt (`ffmpeg -i <datei> -af volumedetect -f null -`). Liegt das Ansteck-Mikro auf einer anderen Aufnahme (z. B. Bildschirmaufnahme am Laptop) und die Kamera ist fast stumm, dann transkribiere die Datei mit dem guten Ton und leg das Kamerabild beim Rendern darunter. Den Versatz findest du per Kreuzkorrelation der Tonspuren, die Startzeiten aus den Metadaten (`creation_time`) sind nur sekundengenau.
 - Fehlen Angaben zum Format, frag einmal nach: Hochformat 1080x1920 (Reels, TikTok, Shorts) oder Querformat 1920x1080 (YouTube). Alles andere hat sinnvolle Standards.
 
 ## 2. Transkribieren
@@ -43,6 +44,8 @@ Das erzeugt in `schnitt-arbeit/`:
 
 - `words.json`: jedes Wort mit Index, Datei, Start und Ende
 - `transkript.txt`: lesbares Transkript, eine Zeile pro Phrase, mit Wort-Indizes vorne, z. B. `[120-134] 02:14.3  Das hat mich ungefähr fünf Minuten gekostet.`
+
+Die Wort-Zeitstempel werden dabei mit einer Spracherkennung (VAD) nachgeschärft. Whisper zieht Wörter nach einer Pause oft über die Stille, ohne das Nachschärfen würde Schritt 4 diese Pausen nicht finden.
 
 Standard-Modell ist `small` (schnell, gut genug für Deutsch). Bei schlechter Tonqualität `--model medium`.
 

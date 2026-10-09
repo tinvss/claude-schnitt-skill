@@ -30,6 +30,34 @@ def load_audio(path):
     return np.frombuffer(raw, dtype=np.float32).copy()
 
 
+def speech_regions(audio):
+    """Bereiche mit Sprache (Silero-VAD aus faster-whisper), in Sekunden."""
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+    opts = VadOptions(threshold=0.4, min_silence_duration_ms=150, speech_pad_ms=60, min_speech_duration_ms=80)
+    return [(t["start"] / 16000, t["end"] / 16000) for t in get_speech_timestamps(audio, opts)]
+
+
+def tighten(words, regions, max_len=0.8, min_len=0.3):
+    """Whisper zieht Wörter nach einer Pause oft über die Stille. Jedes Wort wird auf den
+    Teil gekürzt, in dem wirklich gesprochen wird, damit cuts.py die Pause erkennt.
+    Ein Wort bleibt mindestens min_len lang (nach vorne verlängert), damit leise Satzanfänge
+    nicht abgeschnitten werden. Ohne VAD-Treffer (z. B. Musik drüber) werden überlange Wörter
+    auf 0,5 s vor ihrem Ende gekürzt."""
+    for w in words:
+        s0, e0 = w["s"], w["e"]
+        hits = [(max(a, s0), min(b, e0)) for a, b in regions if a < e0 and b > s0]
+        if hits:
+            s, e = hits[0][0], hits[-1][1]
+            if e - s > max_len:  # Wort reicht über mehrere Sprachbereiche: der letzte ist es meist
+                s = hits[-1][0]
+            if e - s < min_len:
+                s = max(s0, e - min_len)
+                e = min(e0, max(e, s + min_len))
+            w["s"], w["e"] = round(s, 3), round(e, 3)
+        elif e0 - s0 > max_len:
+            w["s"] = round(e0 - 0.5, 3)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("videos", nargs="+")
@@ -50,8 +78,10 @@ def main():
     words, lines = [], []
     for src_i, path in enumerate(sources):
         print(f"Transkribiere {Path(path).name} ...", flush=True)
+        audio = load_audio(path)
+        regions = speech_regions(audio)
         segments, _ = model.transcribe(
-            load_audio(path),
+            audio,
             language=a.lang,
             word_timestamps=True,
             vad_filter=False,  # Versprecher und Neuansätze sollen im Transkript bleiben
@@ -67,6 +97,7 @@ def main():
                               "s": round(w.start, 3), "e": round(w.end, 3)})
             if len(words) > first:
                 seg_words = words[first:]
+                tighten(seg_words, regions)
                 lines.append(f"[{first}-{len(words) - 1}] {Path(path).name} {mmss(seg_words[0]['s'])}  "
                              + " ".join(x["w"] for x in seg_words))
 
